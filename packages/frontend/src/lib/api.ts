@@ -1,5 +1,6 @@
 import type { ChatApiResponse, HealthInfo, PoolMember, SettingsResponse } from "./types";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const SESSION_TOKEN_KEY = "ghost:session";
 
 function getAuthHeaders(): Record<string, string> {
@@ -22,7 +23,7 @@ async function safeJson<T>(res: Response): Promise<T> {
 export async function sendChatMessage(message: string, walletAddress?: string): Promise<ChatApiResponse> {
   let res: Response;
   try {
-    res = await fetch("/api/agent/chat", {
+    res = await fetch(`${API_BASE}/api/agent/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ message, wallet: walletAddress }),
@@ -57,7 +58,7 @@ export async function sendChatMessage(message: string, walletAddress?: string): 
 }
 
 export async function confirmAction(actionId: string, retryAuth?: () => Promise<string | null>): Promise<{ confirmed: boolean; result?: unknown }> {
-  let res = await fetch("/api/agent/confirm", {
+  let res = await fetch(`${API_BASE}/api/agent/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ actionId, approved: true }),
@@ -68,7 +69,7 @@ export async function confirmAction(actionId: string, retryAuth?: () => Promise<
     const newToken = await retryAuth();
     if (newToken) {
       sessionStorage.setItem(SESSION_TOKEN_KEY, newToken);
-      res = await fetch("/api/agent/confirm", {
+      res = await fetch(`${API_BASE}/api/agent/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${newToken}` },
         body: JSON.stringify({ actionId, approved: true }),
@@ -84,7 +85,7 @@ export async function confirmAction(actionId: string, retryAuth?: () => Promise<
 }
 
 export async function rejectAction(actionId: string): Promise<{ rejected: boolean }> {
-  const res = await fetch("/api/agent/confirm", {
+  const res = await fetch(`${API_BASE}/api/agent/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ actionId, approved: false }),
@@ -105,7 +106,7 @@ export async function fetchTreasuryState(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await fetch("/api/treasury/state");
+    res = await fetch(`${API_BASE}/api/treasury/state`);
   } catch {
     throw new Error("Network error");
   }
@@ -141,7 +142,7 @@ export async function fetchChatHistory(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await fetch("/api/agent/history", {
+    res = await fetch(`${API_BASE}/api/agent/history`, {
       headers: getAuthHeaders(),
     });
   } catch {
@@ -166,7 +167,7 @@ export async function fetchChatHistory(): Promise<{
 
 export async function clearChatHistory(): Promise<void> {
   try {
-    await fetch("/api/agent/clear", { method: "POST", headers: getAuthHeaders() });
+    await fetch(`${API_BASE}/api/agent/clear`, { method: "POST", headers: getAuthHeaders() });
   } catch {
     // Silently ignore — best effort
   }
@@ -175,7 +176,7 @@ export async function clearChatHistory(): Promise<void> {
 export async function fetchHealth(): Promise<HealthInfo> {
   let res: Response;
   try {
-    res = await fetch("/health");
+    res = await fetch(`${API_BASE}/health`);
   } catch {
     throw new Error("Network error");
   }
@@ -195,7 +196,7 @@ export async function fetchHealth(): Promise<HealthInfo> {
 export async function fetchPrice(asset: string): Promise<{ price: number }> {
   let res: Response;
   try {
-    res = await fetch(`/price/${asset.toLowerCase()}`);
+    res = await fetch(`${API_BASE}/price/${asset.toLowerCase()}`);
   } catch {
     throw new Error("Network error");
   }
@@ -208,7 +209,7 @@ export async function fetchPrice(asset: string): Promise<{ price: number }> {
 export async function fetchPoolMembers(): Promise<PoolMember[]> {
   let res: Response;
   try {
-    res = await fetch("/api/members", {
+    res = await fetch(`${API_BASE}/api/members`, {
       headers: getAuthHeaders(),
     });
   } catch {
@@ -236,7 +237,7 @@ export async function fetchPoolMembers(): Promise<PoolMember[]> {
 export async function fetchConstraints(): Promise<SettingsResponse> {
   let res: Response;
   try {
-    res = await fetch("/api/treasury/settings");
+    res = await fetch(`${API_BASE}/api/treasury/settings`);
   } catch {
     return {
       constraints: { maxTradePct: 10, cooldownMinutes: 5, allowedTokens: [], paused: false },
@@ -278,7 +279,7 @@ export async function fetchActivityLog(params?: {
 
   let res: Response;
   try {
-    res = await fetch(`/api/activity?${searchParams.toString()}`);
+    res = await fetch(`${API_BASE}/api/activity?${searchParams.toString()}`);
   } catch {
     return { activities: [] };
   }
@@ -302,7 +303,7 @@ export async function fetchStrategyRules(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await fetch("/api/strategy/rules");
+    res = await fetch(`${API_BASE}/api/strategy/rules`);
   } catch {
     return { rules: [] };
   }
@@ -316,7 +317,7 @@ export async function fetchStrategyStatus(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await fetch("/api/strategy/status");
+    res = await fetch(`${API_BASE}/api/strategy/status`);
   } catch {
     return { running: false, lastEvaluation: null };
   }
@@ -325,7 +326,7 @@ export async function fetchStrategyStatus(): Promise<{
 }
 
 export async function registerMember(wallet: string): Promise<{ member: any; votingPower: number }> {
-  const res = await fetch("/api/members/register", {
+  const res = await fetch(`${API_BASE}/api/members/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ wallet }),

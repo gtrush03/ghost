@@ -103,12 +103,12 @@ express, cors, better-sqlite3
 
 ### Demo APIs (x402-gated price feeds)
 ```
-express, @x402/express, @x402/core, cors
+express, @x402/express, @x402/core, @x402/evm, cors
 ```
 
 ### Contracts
 ```
-Foundry (foundryup --network monad), Solidity 0.8.x, evmVersion: prague
+Foundry (foundryup --network monad), Solidity 0.8.28, evmVersion: prague
 ```
 
 ## Environment Variables
@@ -117,6 +117,8 @@ Foundry (foundryup --network monad), Solidity 0.8.x, evmVersion: prague
 ANTHROPIC_API_KEY=sk-ant-...
 PRIVATE_KEY=0x...           # deployer wallet
 AGENT_PRIVATE_KEY=0x...     # agent wallet (for x402 + DeFi)
+AGENT_ADDRESS=0x...         # derived from AGENT_PRIVATE_KEY (cast wallet address)
+GHOST_VAULT_ADDRESS=0x...   # set after deploying GhostVault contract
 MONAD_RPC_URL=https://testnet-rpc.monad.xyz
 UNLINK_CHAIN=monad-testnet
 X402_FACILITATOR_URL=https://x402-facilitator.molandak.org
@@ -167,6 +169,38 @@ ghost-treasury/
 │       └── src/GhostVault.sol      # on-chain constraint enforcement
 ```
 
+## Unlink CLI (Development Tool)
+
+Install globally for testing deposits, balances, swaps from terminal:
+```bash
+npm install -g @unlink-xyz/cli@canary
+export UNLINK_CHAIN=monad-testnet
+export UNLINK_PRIVATE_KEY=$PRIVATE_KEY
+```
+
+Key commands (always run `source .env` first — CLI does NOT auto-load .env):
+```bash
+unlink-cli wallet create              # Generate mnemonic + first account
+unlink-cli sync                       # Sync before any reads
+unlink-cli balance                    # All token balances
+unlink-cli deposit --token 0x534b... --amount 1000000  # Deposit USDC
+unlink-cli send --to unlink1... --token 0x... --amount 500000  # Private transfer
+unlink-cli withdraw --to 0xEOA --token 0x... --amount 250000   # Withdraw
+unlink-cli history                    # Transaction history
+unlink-cli notes                      # List UTXOs
+unlink-cli --json balance             # Machine-readable output
+unlink-cli tx-status <relay-id>       # Track transaction
+```
+
+Multisig (for DAO treasury):
+```bash
+unlink-cli multisig create -t 2 -n 3 --name treasury   # Create 2-of-3
+unlink-cli multisig join -c <code> --name treasury      # Others join
+unlink-cli multisig use treasury                        # Set active
+unlink-cli multisig sync && unlink-cli multisig balance # Check
+unlink-cli multisig listen --account treasury --auto-approve  # Co-signer
+```
+
 ## Unlink SDK Usage
 
 ### Init (Node.js backend)
@@ -177,32 +211,70 @@ const unlink = await initUnlink({
   chain: "monad-testnet",
   storage: createSqliteStorage({ path: "./wallet.db" }),
 });
+// Auto-creates seed, first account, syncs notes
 ```
 
 ### Check Balances
 ```typescript
-const balances = await unlink.getBalances();
-// Returns: { token: address, amount: bigint }[]
+const balances = await unlink.getBalances();  // Record<string, bigint>
+const usdc = await unlink.getBalance("0x534b2f3A21130d7a60830c2Df862319e593943A3"); // bigint
 ```
 
 ### DeFi Adapter (Atomic Private Swap)
 ```typescript
-await unlink.interact({
-  adapterAddress: DEFI_ADAPTER_ADDRESS,
-  inputs: [{ token: USDC_ADDRESS, amount: parseUnits("5000", 6) }],
-  calls: [
-    { to: USDC_ADDRESS, data: approveCalldata },
-    { to: ROUTER_ADDRESS, data: swapCalldata },
-  ],
-  reshields: [{ token: WETH_ADDRESS, minAmount: minEthOut }],
+import { approve, buildCall } from "@unlink-xyz/core";
+import { waitForConfirmation } from "@unlink-xyz/node";
+
+const approveCall = approve(tokenIn, dexRouter, amountIn);
+const swapCall = buildCall({
+  to: dexRouter,
+  abi: "function exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))",
+  functionName: "exactInputSingle",
+  args: [[tokenIn, tokenOut, 3000, unlink.adapter.address, amountIn, minAmountOut, 0]],
 });
+
+const result = await unlink.interact({
+  spend: [{ token: tokenIn, amount: amountIn }],
+  calls: [approveCall, swapCall],
+  receive: [{ token: tokenOut, minAmount: minAmountOut }],
+});
+
+const status = await waitForConfirmation(unlink, result.relayId);
 ```
 
-### Burner Accounts (for x402)
+### Burner Accounts (for x402 payments)
 ```typescript
-await unlink.fundBurner(0, { token: USDC_ADDRESS, amount: parseUnits("1", 6) });
-const burnerAddress = unlink.burnerAddressOf(0);
-// Use burner private key for x402 client signer
+// Derive burner address
+const { address } = await unlink.burner.addressOf(0);
+
+// Fund burner from pool (private withdraw)
+const fundResult = await unlink.burner.fund(0, { token: USDC_ADDRESS, amount: 1000000n });
+await waitForConfirmation(unlink, fundResult.relayId);
+
+// Export private key for x402 signer
+const burnerKey = await unlink.burner.exportKey(0); // "0x..."
+
+// After use, sweep back to pool
+await unlink.burner.sweepToPool(0, { token: USDC_ADDRESS });
+```
+
+### Deposit (Public → Private)
+```typescript
+const deposit = await unlink.deposit({
+  depositor: "0xYourEOA",
+  deposits: [{ token: USDC_ADDRESS, amount: 1000000n }],
+});
+// Returns { relayId, to, calldata, value }
+// Send on-chain, then confirm:
+await unlink.confirmDeposit(deposit.relayId);
+```
+
+### Withdraw (Private → Public)
+```typescript
+const result = await unlink.withdraw({
+  withdrawals: [{ token: USDC_ADDRESS, amount: 500000n, recipient: "0xEOA" }],
+});
+await waitForConfirmation(unlink, result.relayId);
 ```
 
 ### Privacy Model
@@ -211,6 +283,16 @@ const burnerAddress = unlink.burnerAddressOf(0);
 | Deposit   | PUBLIC | PUBLIC | PRIVATE   | PUBLIC |
 | Transfer  | PRIVATE| PRIVATE| PRIVATE   | PRIVATE|
 | Withdraw  | PUBLIC | PRIVATE| PUBLIC    | PUBLIC |
+| DeFi      | PRIVATE| PRIVATE| PRIVATE   | PRIVATE |
+
+### Key SDK Facts
+- All packages use `@canary` channel: `npm install @unlink-xyz/node@canary`
+- ZK proof generation takes 5-30 seconds (normal)
+- Always `sync()` before reading balances
+- Native dependency: `better-sqlite3` (needs Python 3 + C++ compiler)
+- Adapter address auto-resolved: `unlink.adapter.address`
+- Burner keys are BIP-44 derived, MetaMask-compatible
+- See `.claude/skills/unlink-sdk.md` for complete API reference
 
 ## x402 Integration
 
@@ -220,10 +302,22 @@ import { paymentMiddleware } from "@x402/express";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 
-const server = new x402ResourceServer(
-  new HTTPFacilitatorClient({ url: "https://x402-facilitator.molandak.org" })
-);
-server.register("eip155:10143", new ExactEvmScheme());
+const facilitator = new HTTPFacilitatorClient({ url: "https://x402-facilitator.molandak.org" });
+const server = new x402ResourceServer(facilitator);
+
+// CRITICAL: Monad is NOT in the default stablecoin map — must register!
+const evmScheme = new ExactEvmScheme();
+evmScheme.registerMoneyParser(async (amount, network) => {
+  if (network === "eip155:10143") {
+    return {
+      amount: Math.round(amount * 1e6).toString(),
+      asset: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+      extra: { name: "USDC", version: "2" },  // domain name is "USDC", NOT "USD Coin"
+    };
+  }
+  return null;
+});
+server.register("eip155:10143", evmScheme);
 
 app.use(paymentMiddleware({
   "GET /price/eth": {
@@ -260,8 +354,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const claude = new Anthropic();
 
-async function runAgent(userMessage: string): AsyncGenerator<AgentEvent> {
-  const messages = [{ role: "user", content: userMessage }];
+async function* runAgent(message: string, services: { blockchain: BlockchainService; unlink: UnlinkService; x402: X402Service }): AsyncGenerator<AgentEvent> {
+  const messages = [{ role: "user", content: message }];
 
   while (true) {
     const response = await claude.messages.create({
@@ -472,6 +566,10 @@ Judges are RANDOM — 2 per room, 4 rooms. Assignment at 12:30 PM Sunday.
 [ ] Verify ANTHROPIC_API_KEY works
 [ ] Hit ALL faucets: monad.xyz, quicknode, alchemy, chainlink, ethglobal, gas.zip, morkie, unlink
 [ ] Download docs.monad.xyz/llms-full.txt for AI context
+[ ] Download docs.unlink.xyz/llms-full.txt for Unlink context
+[ ] Install Unlink CLI: npm install -g @unlink-xyz/cli@canary
+[ ] Create Unlink wallet: unlink-cli wallet create (save mnemonic!)
+[ ] Test Unlink: unlink-cli sync && unlink-cli balance
 [ ] Install MonDeployer: git clone https://github.com/adrianmonad/MonDeployer.git
 [ ] Talk to Paul Henry TONIGHT: DeFi adapter address, burner key export, pool tokens
 [ ] Join Telegram: https://t.me/+OWyoLUv9CW9iOTJk
@@ -494,9 +592,24 @@ Judges are RANDOM — 2 per room, 4 rooms. Assignment at 12:30 PM Sunday.
 - UI looks investor-grade: dark theme, real data viz, no broken states
 - File bugs through feedback form (Slacks his engineers, shows we're power users)
 
+## Skills (in .claude/skills/)
+
+- **unlink-sdk.md** — Complete Unlink CLI, Node SDK, React SDK, DeFi adapter, burner accounts API reference. Use this before writing any Unlink integration code.
+- **x402.md** — x402 protocol: Express middleware (server), fetch wrapper (client), Monad-specific config (registerMoneyParser, USDC domain name "USDC"), facilitator API, EIP-3009 flow. Use before writing any x402 payment code.
+- **monad.md** — Monad testnet: RPC endpoints, gas model (charged on LIMIT), eth_sendRawTransactionSync, nonce manager, Foundry/Hardhat deploy, contract verification, opcode repricing, staking precompile, all gotchas.
+- **mondeployer.md** — MonDeployer MCP: deploy-contract + send-token tools, env.js setup (NOT .env), Solidity 0.8.28 forced, no imports. Use for quick one-off deploys via Claude.
+
 ## Reference Docs
 
 - Unlink: https://docs.unlink.xyz
+- Unlink LLM context: https://docs.unlink.xyz/llms-full.txt
+- Unlink API Reference: https://docs.unlink.xyz/sdk/api-reference.md
+- Unlink CLI: https://docs.unlink.xyz/sdk/cli.md
+- Unlink Private DeFi: https://docs.unlink.xyz/sdk/defi.md
+- Unlink Node SDK: https://docs.unlink.xyz/sdk/node.md
+- Unlink React SDK: https://docs.unlink.xyz/sdk/react.md
+- Unlink Faucet: https://faucet.unlink.xyz
+- Unlink Feedback: https://feedback.unlink.xyz
 - Monad: https://docs.monad.xyz
 - x402: https://docs.cdp.coinbase.com/x402/welcome
 - Claude API: https://docs.anthropic.com/en/docs

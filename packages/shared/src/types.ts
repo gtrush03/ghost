@@ -1,3 +1,13 @@
+// Agent
+export type AgentStatus = "idle" | "processing" | "earning";
+
+export interface AgentInfo {
+  name: string;
+  publicAddress: string;
+  unlinkAddress: string;
+  status: AgentStatus;
+}
+
 // Treasury state
 export interface TreasuryState {
   balances: TokenBalance[];

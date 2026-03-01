@@ -1,0 +1,33 @@
+{
+  "name": "@ghost/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/research.ts & tsx watch src/trading.ts & tsx watch src/treasury.ts",
+    "test:phase1": "tsx src/test-phase1.ts",
+    "test:phase2": "tsx src/test-phase2.ts",
+    "research": "tsx src/research.ts",
+    "trading": "tsx src/trading.ts",
+    "treasury": "tsx src/treasury.ts"
+  },
+  "dependencies": {
+    "@unlink-xyz/node": "canary",
+    "@x402/evm": "latest",
+    "@x402/express": "latest",
+    "@x402/fetch": "latest",
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

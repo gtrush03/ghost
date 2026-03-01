@@ -10,15 +10,21 @@ export const SUGGESTED_PROMPTS = [
   { label: "100% memecoin", message: "Swap 100% to memecoin" },
   { label: "Privacy model", message: "Who can see our strategy?" },
   { label: "Block explorer", message: "Show me on the block explorer" },
+  { label: "Set strategy", message: "Set target allocation: 60% USDC, 40% WMON" },
+  { label: "Auto-trade rules", message: "What are the current strategy rules?" },
 ];
 
 export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   check_balance: "Checking treasury balances",
   get_price: "Fetching price via x402",
-  execute_swap: "Executing private swap",
+  execute_swap: "Proposing private swap",
   generate_report: "Generating treasury report",
-  update_settings: "Updating governance settings",
+  update_settings: "Proposing settings change",
   get_members: "Fetching member list",
+  execute_withdrawal: "Proposing withdrawal",
+  set_strategy_rule: "Proposing strategy rule",
+  get_strategy_rules: "Fetching strategy rules",
+  deactivate_strategy_rule: "Proposing rule removal",
 };
 
 export const TOKEN_COLORS: Record<string, string> = {

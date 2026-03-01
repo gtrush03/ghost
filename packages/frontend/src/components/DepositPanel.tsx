@@ -5,6 +5,7 @@ import { X, Shield, ArrowRight, Check, Loader2 } from "lucide-react";
 interface DepositPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  onDepositComplete?: () => void;
 }
 
 const TOKENS = [
@@ -17,7 +18,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3003";
 
 type Step = "input" | "signing" | "confirming" | "done" | "error";
 
-export function DepositPanel({ isOpen, onClose }: DepositPanelProps) {
+export function DepositPanel({ isOpen, onClose, onDepositComplete }: DepositPanelProps) {
   const [token, setToken] = useState(TOKENS[0]);
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<Step>("input");
@@ -57,11 +58,15 @@ export function DepositPanel({ isOpen, onClose }: DepositPanelProps) {
       // Convert to raw amount
       const rawAmount = BigInt(Math.floor(parseFloat(amount) * 10 ** token.decimals)).toString();
 
+      // Calculate amountUsd (USDC = 1:1, MON/WMON = approximate)
+      const amountNum = parseFloat(amount);
+      const amountUsd = token.symbol === "USDC" ? amountNum : amountNum * 0.42;
+
       // Get deposit calldata from backend
       const res = await fetch(`${API_BASE}/api/treasury/deposit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositor, token: token.address, amount: rawAmount }),
+        body: JSON.stringify({ depositor, token: token.address, amount: rawAmount, amountUsd }),
       });
 
       if (!res.ok) {
@@ -69,7 +74,7 @@ export function DepositPanel({ isOpen, onClose }: DepositPanelProps) {
         throw new Error(data.error || "Failed to generate deposit");
       }
 
-      const { to, calldata, value } = await res.json();
+      const { to, calldata, value, relayId } = await res.json();
 
       // Send the on-chain transaction via wallet
       const hash = await eth.request({
@@ -85,11 +90,11 @@ export function DepositPanel({ isOpen, onClose }: DepositPanelProps) {
       setTxHash(hash);
       setStep("confirming");
 
-      // Confirm deposit with backend
+      // Confirm deposit with backend using relayId (NOT the tx hash)
       const confirmRes = await fetch(`${API_BASE}/api/treasury/deposit/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ relayId: hash }),
+        body: JSON.stringify({ relayId }),
       });
 
       if (!confirmRes.ok) {
@@ -98,6 +103,7 @@ export function DepositPanel({ isOpen, onClose }: DepositPanelProps) {
       }
 
       setStep("done");
+      onDepositComplete?.();
     } catch (err: any) {
       if (err.code === 4001) {
         // User rejected in wallet

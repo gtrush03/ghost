@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutDashboard, Users, Settings } from "lucide-react";
+import { LayoutDashboard, Clock, Users, Settings } from "lucide-react";
 import type { TreasuryDisplay, PoolState, SettingsResponse } from "../lib/types";
 import type { ActivityItem } from "../lib/types";
 import { TreasuryStats } from "./TreasuryStats";
@@ -7,6 +7,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { YourPosition } from "./YourPosition";
 import { MemberList } from "./MemberList";
 import { SettingsPanel } from "./SettingsPanel";
+import { ActivityLedger } from "./ActivityLedger";
 
 interface LeftTabsProps {
   treasury: TreasuryDisplay | null;
@@ -16,17 +17,19 @@ interface LeftTabsProps {
   walletAddress: string | null;
   onConnect: () => void;
   onAskAgent: (message: string) => void;
+  onDeposit?: () => void;
 }
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "activity", label: "Activity", icon: Clock },
   { id: "members", label: "Members", icon: Users },
   { id: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
-export function LeftTabs({ treasury, activities, pool, settings, walletAddress, onConnect, onAskAgent }: LeftTabsProps) {
+export function LeftTabs({ treasury, activities, pool, settings, walletAddress, onConnect, onAskAgent, onDeposit }: LeftTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
 
   const me = walletAddress
@@ -68,10 +71,12 @@ export function LeftTabs({ treasury, activities, pool, settings, walletAddress, 
               votingPower={me?.votingPower ?? 0}
               netValueUsd={me?.netValueUsd ?? 0}
               onConnect={onConnect}
+              onDeposit={onDeposit}
             />
             <ActivityFeed activities={activities} />
           </>
         )}
+        {activeTab === "activity" && <ActivityLedger />}
         {activeTab === "members" && (
           <div className="glass-card p-4">
             <h2 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">

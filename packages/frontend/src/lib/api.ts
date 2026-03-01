@@ -1,5 +1,15 @@
 import type { ChatApiResponse, HealthInfo, PoolMember, SettingsResponse } from "./types";
 
+const SESSION_TOKEN_KEY = "ghost:session";
+
+function getAuthHeaders(): Record<string, string> {
+  const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 async function safeJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   try {
@@ -14,7 +24,7 @@ export async function sendChatMessage(message: string, walletAddress?: string): 
   try {
     res = await fetch("/api/agent/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ message, wallet: walletAddress }),
     });
   } catch {
@@ -44,6 +54,46 @@ export async function sendChatMessage(message: string, walletAddress?: string): 
     : undefined;
 
   return { response, toolCalls, events: events as ChatApiResponse["events"] };
+}
+
+export async function confirmAction(actionId: string, retryAuth?: () => Promise<string | null>): Promise<{ confirmed: boolean; result?: unknown }> {
+  let res = await fetch("/api/agent/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ actionId, approved: true }),
+  });
+
+  // Auto-retry on 401 if we can refresh auth
+  if (res.status === 401 && retryAuth) {
+    const newToken = await retryAuth();
+    if (newToken) {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, newToken);
+      res = await fetch("/api/agent/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${newToken}` },
+        body: JSON.stringify({ actionId, approved: true }),
+      });
+    }
+  }
+
+  if (!res.ok) {
+    const err = await safeJson<{ error?: string }>(res).catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return safeJson(res);
+}
+
+export async function rejectAction(actionId: string): Promise<{ rejected: boolean }> {
+  const res = await fetch("/api/agent/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ actionId, approved: false }),
+  });
+  if (!res.ok) {
+    const err = await safeJson<{ error?: string }>(res).catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return safeJson(res);
 }
 
 export async function fetchTreasuryState(): Promise<{
@@ -91,7 +141,9 @@ export async function fetchChatHistory(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await fetch("/api/agent/history");
+    res = await fetch("/api/agent/history", {
+      headers: getAuthHeaders(),
+    });
   } catch {
     throw new Error("Network error");
   }
@@ -114,7 +166,7 @@ export async function fetchChatHistory(): Promise<{
 
 export async function clearChatHistory(): Promise<void> {
   try {
-    await fetch("/api/agent/clear", { method: "POST" });
+    await fetch("/api/agent/clear", { method: "POST", headers: getAuthHeaders() });
   } catch {
     // Silently ignore — best effort
   }
@@ -156,7 +208,9 @@ export async function fetchPrice(asset: string): Promise<{ price: number }> {
 export async function fetchPoolMembers(): Promise<PoolMember[]> {
   let res: Response;
   try {
-    res = await fetch("/api/members");
+    res = await fetch("/api/members", {
+      headers: getAuthHeaders(),
+    });
   } catch {
     throw new Error("Network error");
   }
@@ -201,10 +255,79 @@ export async function fetchConstraints(): Promise<SettingsResponse> {
   return safeJson<SettingsResponse>(res);
 }
 
+export async function fetchActivityLog(params?: {
+  limit?: number;
+  offset?: number;
+  type?: string;
+}): Promise<{
+  activities: Array<{
+    id: number;
+    eventType: string;
+    refId: number | null;
+    actorWallet: string | null;
+    summary: string;
+    details: Record<string, unknown> | null;
+    privacy: string;
+    createdAt: string;
+  }>;
+}> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  if (params?.type) searchParams.set("type", params.type);
+
+  let res: Response;
+  try {
+    res = await fetch(`/api/activity?${searchParams.toString()}`);
+  } catch {
+    return { activities: [] };
+  }
+  if (!res.ok) return { activities: [] };
+  return safeJson(res);
+}
+
+export async function fetchStrategyRules(): Promise<{
+  rules: Array<{
+    id: number;
+    ruleType: string;
+    tokenSymbol: string | null;
+    targetPct: number | null;
+    triggerPrice: number | null;
+    triggerDirection: string | null;
+    triggerAction: string | null;
+    triggerAmountPct: number | null;
+    thresholdPct: number | null;
+    createdAt: string;
+  }>;
+}> {
+  let res: Response;
+  try {
+    res = await fetch("/api/strategy/rules");
+  } catch {
+    return { rules: [] };
+  }
+  if (!res.ok) return { rules: [] };
+  return safeJson(res);
+}
+
+export async function fetchStrategyStatus(): Promise<{
+  running: boolean;
+  lastEvaluation: string | null;
+}> {
+  let res: Response;
+  try {
+    res = await fetch("/api/strategy/status");
+  } catch {
+    return { running: false, lastEvaluation: null };
+  }
+  if (!res.ok) return { running: false, lastEvaluation: null };
+  return safeJson(res);
+}
+
 export async function registerMember(wallet: string): Promise<{ member: any; votingPower: number }> {
   const res = await fetch("/api/members/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ wallet }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

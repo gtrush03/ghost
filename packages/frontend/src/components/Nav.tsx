@@ -1,4 +1,5 @@
-import { Ghost, Shield, ArrowDownToLine } from "lucide-react";
+import { Shield, ArrowDownToLine } from "lucide-react";
+import { GhostLogo } from "./GhostLogo";
 import { WalletButton } from "./WalletButton";
 
 interface NavProps {
@@ -8,16 +9,17 @@ interface NavProps {
   walletAddress: string | null;
   isConnecting: boolean;
   chainOk: boolean;
+  authToken: string | null;
   onConnect: () => void;
   onDisconnect: () => void;
 }
 
-export function Nav({ isLive, brain, onDeposit, walletAddress, isConnecting, chainOk, onConnect, onDisconnect }: NavProps) {
+export function Nav({ isLive, brain, onDeposit, walletAddress, isConnecting, chainOk, authToken, onConnect, onDisconnect }: NavProps) {
   return (
-    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-40">
-      <div className="glass-card px-6 py-2.5 flex items-center gap-4">
+    <nav className="fixed top-0 left-0 right-0 z-40 bg-glass border-b border-glass-border backdrop-blur-[40px]">
+      <div className="max-w-7xl mx-auto px-6 py-2.5 flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <Ghost className="w-5 h-5 text-gold" />
+          <GhostLogo className="w-5 h-5" variant="gold" />
           <span className="font-semibold text-text-primary text-sm tracking-wide">
             Ghost Treasury
           </span>
@@ -55,9 +57,10 @@ export function Nav({ isLive, brain, onDeposit, walletAddress, isConnecting, cha
           </>
         )}
 
+        <div className="flex-1" />
+
         {onDeposit && (
           <>
-            <div className="w-px h-4 bg-glass-border" />
             <button
               onClick={onDeposit}
               className="flex items-center gap-1.5 px-3 py-1 rounded-lg
@@ -70,12 +73,11 @@ export function Nav({ isLive, brain, onDeposit, walletAddress, isConnecting, cha
           </>
         )}
 
-        <div className="w-px h-4 bg-glass-border" />
-
         <WalletButton
           address={walletAddress}
           isConnecting={isConnecting}
           chainOk={chainOk}
+          authToken={authToken}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
         />

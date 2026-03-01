@@ -171,7 +171,15 @@ export async function validateTradeOnChain(params: {
   totalTreasuryUsd: number;
 }): Promise<ValidationResult> {
   const vaultAddress = process.env.GHOST_VAULT_ADDRESS;
-  if (!vaultAddress) return { allowed: true }; // Skip if not deployed
+  if (!vaultAddress) {
+    const failMode = process.env.VAULT_FAIL_MODE ?? "closed";
+    if (failMode === "open") return { allowed: true };
+    return {
+      allowed: false,
+      reason: "GhostVault not deployed. Trading blocked for safety.",
+      suggestion: "Set GHOST_VAULT_ADDRESS in .env or set VAULT_FAIL_MODE=open for demo mode.",
+    };
+  }
 
   try {
     const client = createPublicClient({ transport: http(RPC_URL) });
@@ -197,9 +205,19 @@ export async function validateTradeOnChain(params: {
     }
     return { allowed: true };
   } catch (error: any) {
-    // Don't block trades if on-chain check fails
-    console.warn(`[validator] On-chain check failed: ${error.message}`);
-    return { allowed: true };
+    const failMode = process.env.VAULT_FAIL_MODE ?? "closed";
+    if (failMode === "open") {
+      // Fail-open: allow trade if on-chain check fails (demo mode)
+      console.warn(`[validator] On-chain check failed (fail-open): ${error.message}`);
+      return { allowed: true };
+    }
+    // Fail-closed: block trade if on-chain check fails (default, secure)
+    console.warn(`[validator] On-chain check failed (fail-closed): ${error.message}`);
+    return {
+      allowed: false,
+      reason: "On-chain validation unavailable. Trading blocked for safety.",
+      suggestion: "Set VAULT_FAIL_MODE=open in .env to allow trades when on-chain validation is unavailable.",
+    };
   }
 }
 

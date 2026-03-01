@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ensureMember, getMember, getMembersWithPower, getVotingPower, getDepositsForMember } from "../services/db.js";
+import { ensureMember, getMember, getMembersWithPower, getVotingPower, getDepositsForMember, logActivity } from "../services/db.js";
 
 export function createMembersRouter(): Router {
   const router = Router();
@@ -13,6 +13,14 @@ export function createMembersRouter(): Router {
 
     const member = ensureMember(wallet, displayName);
     const votingPower = getVotingPower(wallet);
+
+    logActivity({
+      eventType: "member_joined",
+      actorWallet: wallet,
+      summary: `New member joined: ${wallet.slice(0, 6)}...${wallet.slice(-4)}`,
+      details: { wallet, displayName },
+      privacy: "public",
+    });
 
     return res.json({ member, votingPower });
   });

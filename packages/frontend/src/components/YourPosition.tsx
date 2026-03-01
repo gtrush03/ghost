@@ -1,5 +1,6 @@
 import { TrendingUp, Wallet } from "lucide-react";
 import { formatUsd } from "../lib/utils";
+import { OnboardingFlow } from "./OnboardingFlow";
 
 interface YourPositionProps {
   walletAddress: string | null;
@@ -7,9 +8,10 @@ interface YourPositionProps {
   votingPower: number;
   netValueUsd: number;
   onConnect: () => void;
+  onDeposit?: () => void;
 }
 
-export function YourPosition({ walletAddress, sharePercent, votingPower, netValueUsd, onConnect }: YourPositionProps) {
+export function YourPosition({ walletAddress, sharePercent, votingPower, netValueUsd, onConnect, onDeposit }: YourPositionProps) {
   if (!walletAddress) {
     return (
       <div className="glass-card p-4">
@@ -30,16 +32,7 @@ export function YourPosition({ walletAddress, sharePercent, votingPower, netValu
   }
 
   if (sharePercent === 0) {
-    return (
-      <div className="glass-card p-4">
-        <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
-          Your Position
-        </h3>
-        <p className="text-xs text-text-muted">
-          Deposit to the pool to become a member and earn voting power.
-        </p>
-      </div>
-    );
+    return <OnboardingFlow onDeposit={onDeposit} />;
   }
 
   return (

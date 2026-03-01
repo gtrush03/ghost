@@ -1,5 +1,6 @@
 import { useRef, useEffect } from "react";
-import { Ghost, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { GhostLogo } from "./GhostLogo";
 import type { ChatMessage as ChatMessageType } from "../lib/types";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -17,6 +18,8 @@ interface AgentChatProps {
   walletAddress?: string | null;
   mySharePercent?: number;
   prefillMessage?: string;
+  onConfirmAction?: (actionId: string) => void;
+  onRejectAction?: (actionId: string) => void;
 }
 
 export function AgentChat({
@@ -29,6 +32,8 @@ export function AgentChat({
   walletAddress,
   mySharePercent,
   prefillMessage,
+  onConfirmAction,
+  onRejectAction,
 }: AgentChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +54,7 @@ export function AgentChat({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-glass-border">
         <div className="flex items-center gap-2">
-          <Ghost className="w-4 h-4 text-gold" />
+          <GhostLogo className="w-4 h-4" variant="gold" />
           <span className="text-sm font-medium text-text-primary">Ghost Agent</span>
           {model && model !== "unknown" && (
             <span className="text-[10px] text-text-muted font-mono">{model}</span>
@@ -78,7 +83,12 @@ export function AgentChat({
         ) : (
           <div className="py-3 space-y-1">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                onConfirm={onConfirmAction}
+                onReject={onRejectAction}
+              />
             ))}
             {isProcessing && messages[messages.length - 1]?.role === "user" && (
               <ThinkingIndicator />

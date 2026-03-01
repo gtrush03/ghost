@@ -384,13 +384,48 @@ After the hackathon demo was complete, Ghost Treasury evolved from a single-agen
 - All changes logged in `settings_changes` table (approved or rejected)
 - Constraints persist across restarts via SQLite
 
+### Phase 2: Security & UX Upgrade ✅ COMPLETE
+
+**What was added:**
+
+| Feature | Where | What |
+|---------|-------|------|
+| Privy auth | `main.tsx`, `useWallet.ts` | Google/email/wallet login with embedded wallets |
+| SIWE authentication | `routes/auth.ts` | Sign-In With Ethereum — verified wallet sessions |
+| CORS hardening | `treasury.ts` | Origin whitelist instead of wide-open `cors()` |
+| Per-user chat history | `routes/agent.ts` | Each wallet gets its own conversation |
+| Two-phase execution | `agent/tools.ts`, `agent/actions.ts` | Swap/settings/withdrawal require user confirmation |
+| Confirmation UI | `ConfirmationCard.tsx`, `ChatMessage.tsx` | Confirm/Reject buttons with countdown timer |
+| Slippage protection | `agent/tools.ts` | 3% slippage tolerance via x402 price feed |
+| Fail-closed safety | `agent/validator.ts` | Block trades when on-chain validation unavailable |
+| Deposit fix | `DepositPanel.tsx` | Sends relayId (not tx hash) for confirmation |
+| Withdrawal flow | `execute_withdrawal` tool | Members can withdraw from privacy pool |
+
+### Fiat On-Ramp: Alchemy Pay
+
+Alchemy Pay supports Monad mainnet with Apple Pay, Google Pay, Visa, and Mastercard. The integration flow:
+
+1. Member clicks "Deposit via Card" in the UI
+2. Alchemy Pay widget opens (iFrame)
+3. User pays with fiat currency (USD, EUR, etc.)
+4. Alchemy Pay converts to USDC on Monad
+5. USDC sent to member's wallet
+6. Member deposits USDC into the Unlink privacy pool
+
+**Important notes:**
+- Alchemy Pay is **mainnet only** — not available for testnet demo
+- Requires KYB (Know Your Business) for sandbox access
+- Alternative provider: **Transak** (self-service sandbox, Transak One for smart contract deposits)
+- Estimated 2-4 hours to integrate when ready for mainnet
+- Fiat deposits are PUBLIC (KYC required), but once in the Unlink pool, fully private
+
 ### Upcoming Phases
 
 | Phase | What | Status |
 |-------|------|--------|
-| Phase 2 | Token-weighted governance (proposals, voting periods, quorum) | Planned |
-| Phase 3 | Alchemy Pay fiat on-ramp (credit card → USDC → pool) | Planned |
-| Phase 4 | Withdrawal queues, performance charts, viewing key distribution | Future |
+| Phase 3 | Token-weighted governance (proposals, voting periods, quorum) | Planned |
+| Phase 4 | Alchemy Pay fiat on-ramp (credit card → USDC → pool) | Planned |
+| Phase 5 | Withdrawal queues, performance charts, viewing key distribution | Future |
 
 ---
 

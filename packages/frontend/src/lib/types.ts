@@ -14,6 +14,18 @@ export interface TreasuryDisplay {
   lastUpdated: string;
 }
 
+export interface PendingAction {
+  actionId: string;
+  type: "swap" | "settings" | "withdrawal" | "strategy_rule";
+  message: string;
+  params: Record<string, unknown>;
+  expiresIn: string;
+  from?: string;
+  to?: string;
+  amount?: string;
+  amountUsd?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -22,6 +34,7 @@ export interface ChatMessage {
   toolCalls?: DisplayToolCall[];
   isStreaming?: boolean;
   streamedContent?: string;
+  pendingAction?: PendingAction;
 }
 
 export interface DisplayToolCall {

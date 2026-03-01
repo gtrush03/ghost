@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
 import { Settings, Clock, Percent, Coins, MessageSquare } from "lucide-react";
 import type { SettingsResponse } from "../lib/types";
+import { fetchStrategyRules } from "../lib/api";
+import { StrategyRuleCard } from "./StrategyRuleCard";
 
 interface SettingsPanelProps {
   settings: SettingsResponse;
@@ -8,6 +11,10 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ settings, onAskAgent }: SettingsPanelProps) {
   const { constraints, governance } = settings;
+  const [rules, setRules] = useState<any[]>([]);
+  useEffect(() => {
+    fetchStrategyRules().then((data) => setRules(data.rules));
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -98,6 +105,24 @@ export function SettingsPanel({ settings, onAskAgent }: SettingsPanelProps) {
           Settings changes require {(governance.requiredPower * 100).toFixed(0)}% voting power.
           Talk to the agent to propose changes.
         </p>
+      </div>
+
+      {/* Strategy Rules */}
+      <div className="p-3 rounded-lg border border-glass-border bg-glass">
+        <h3 className="text-[10px] font-medium text-text-muted uppercase tracking-wider mb-2">
+          Strategy Rules
+        </h3>
+        {rules.length === 0 ? (
+          <p className="text-[10px] text-text-secondary">
+            No active strategy rules. Ask Ghost to set up autonomous trading.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {rules.map((rule) => (
+              <StrategyRuleCard key={rule.id} rule={rule} onAskAgent={onAskAgent} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

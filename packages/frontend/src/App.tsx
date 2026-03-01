@@ -35,9 +35,10 @@ export function App() {
     [addFromEvents, refreshTreasury, refreshPool, refreshConstraints]
   );
 
-  const { messages, isProcessing, hasInteracted, sendMessage, clearMessages } = useAgent({
+  const { messages, isProcessing, hasInteracted, sendMessage, clearMessages, confirmAction, rejectAction } = useAgent({
     onComplete: handleAgentComplete,
     walletAddress: wallet.address ?? undefined,
+    authToken: wallet.authToken,
   });
 
   const handleSend = useCallback(
@@ -71,12 +72,13 @@ export function App() {
         walletAddress={wallet.address}
         isConnecting={wallet.isConnecting}
         chainOk={wallet.chainOk}
+        authToken={wallet.authToken}
         onConnect={wallet.connect}
         onDisconnect={wallet.disconnect}
       />
 
       {/* Main layout */}
-      <div className="relative z-10 h-full flex flex-col pt-16 px-4 pb-0">
+      <div className="relative z-10 h-full flex flex-col pt-14 px-4 pb-0">
         {/* Pool bar */}
         <div className="max-w-7xl mx-auto w-full mb-2">
           <PoolBar pool={pool} walletAddress={wallet.address} onConnect={wallet.connect} />
@@ -93,6 +95,7 @@ export function App() {
               walletAddress={wallet.address}
               onConnect={wallet.connect}
               onAskAgent={handleAskAgent}
+              onDeposit={() => setDepositOpen(true)}
             />
           </div>
 
@@ -108,6 +111,8 @@ export function App() {
               walletAddress={wallet.address}
               mySharePercent={pool.myShare}
               prefillMessage={prefillMessage}
+              onConfirmAction={confirmAction}
+              onRejectAction={rejectAction}
             />
           </div>
         </div>
@@ -116,7 +121,11 @@ export function App() {
       </div>
 
       {/* Deposit modal */}
-      <DepositPanel isOpen={depositOpen} onClose={() => setDepositOpen(false)} />
+      <DepositPanel
+        isOpen={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        onDepositComplete={() => { refreshTreasury(); refreshPool(); }}
+      />
     </div>
   );
 }

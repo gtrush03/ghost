@@ -7,6 +7,18 @@ import {
   NATIVE_MON,
 } from "@ghost/shared";
 
+export interface WithdrawParams {
+  token: string;
+  amount: bigint;
+  recipient: string;
+}
+
+export interface WithdrawResult {
+  relayId: string;
+  txHash?: string;
+  status: string;
+}
+
 export interface UnlinkService {
   sync(): Promise<void>;
   getBalances(): Promise<Record<string, bigint>>;
@@ -17,6 +29,7 @@ export interface UnlinkService {
   getBurnerKey(index: number): Promise<string>;
   sweepBurner(index: number, token: string): Promise<void>;
   executeSwap(params: SwapParams): Promise<SwapResult>;
+  withdraw(params: WithdrawParams): Promise<WithdrawResult>;
 }
 
 export interface SwapParams {
@@ -101,6 +114,22 @@ export function createUnlinkService(unlink: UnlinkInstance): UnlinkService {
         spend: [{ token: tokenIn, amount: amountIn }],
         calls: [approveCall, swapCall],
         receive: [{ token: tokenOut, minAmount: minAmountOut }],
+      });
+
+      const status = await waitForConfirmation(unlink, result.relayId, { timeout: 120_000 });
+
+      return {
+        relayId: result.relayId,
+        txHash: status.txHash,
+        status: status.state,
+      };
+    },
+
+    async withdraw(params: WithdrawParams): Promise<WithdrawResult> {
+      const { token, amount, recipient } = params;
+
+      const result = await unlink.withdraw({
+        withdrawals: [{ token, amount, recipient }],
       });
 
       const status = await waitForConfirmation(unlink, result.relayId, { timeout: 120_000 });

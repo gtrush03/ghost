@@ -1,4 +1,4 @@
-import { Ghost } from "lucide-react";
+import { GhostLogo } from "./GhostLogo";
 import { motion } from "framer-motion";
 import { SUGGESTED_PROMPTS } from "../lib/constants";
 
@@ -16,7 +16,7 @@ export function SuggestedPrompts({ onSelect }: SuggestedPromptsProps) {
         className="flex flex-col items-center gap-6 max-w-md"
       >
         <div className="w-16 h-16 rounded-2xl bg-glass border border-glass-border flex items-center justify-center">
-          <Ghost className="w-8 h-8 text-gold" />
+          <GhostLogo className="w-8 h-8" variant="gold" />
         </div>
 
         <div className="text-center space-y-2">

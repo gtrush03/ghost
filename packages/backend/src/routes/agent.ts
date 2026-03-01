@@ -1,7 +1,10 @@
 import { Router } from "express";
 import type { ToolContext } from "../agent/tools.js";
+import { executeSwapDirect, executeSettingsDirect, executeWithdrawalDirect, executeStrategyRuleDirect } from "../agent/tools.js";
 import { runAgent } from "../agent/core.js";
 import type { AgentEvent, AgentMessage } from "@ghost/shared";
+import { optionalAuth, requireAuth } from "./auth.js";
+import { consumeAction } from "../agent/actions.js";
 
 const MAX_MESSAGE_LENGTH = 500;
 const RATE_LIMIT_MS = 500; // minimum gap between requests per IP
@@ -9,13 +12,19 @@ const RATE_LIMIT_MS = 500; // minimum gap between requests per IP
 export function createAgentRouter(toolCtx: ToolContext): Router {
   const router = Router();
 
-  // Conversation history (in-memory for demo)
-  const history: AgentMessage[] = [];
+  // Per-user conversation history (keyed by wallet or __anonymous__)
+  const historyMap: Map<string, AgentMessage[]> = new Map();
+
+  function getHistory(wallet?: string): AgentMessage[] {
+    const key = wallet ?? "__anonymous__";
+    if (!historyMap.has(key)) historyMap.set(key, []);
+    return historyMap.get(key)!;
+  }
 
   // Simple rate limiter
   const lastRequest: Map<string, number> = new Map();
 
-  router.post("/chat", async (req, res) => {
+  router.post("/chat", optionalAuth, async (req, res) => {
     // Rate limit
     const ip = req.ip ?? "unknown";
     const now = Date.now();
@@ -25,7 +34,9 @@ export function createAgentRouter(toolCtx: ToolContext): Router {
     }
     lastRequest.set(ip, now);
 
-    const { message, wallet } = req.body;
+    const { message } = req.body;
+    // Use verified wallet from auth middleware, fall back to body wallet for backwards compat
+    const wallet = (req as any).verifiedWallet ?? req.body.wallet;
 
     if (!message || typeof message !== "string") {
       return res.status(400).json({ error: "message is required" });
@@ -48,6 +59,7 @@ export function createAgentRouter(toolCtx: ToolContext): Router {
       callerWallet: typeof wallet === "string" ? wallet : undefined,
     };
 
+    const history = getHistory(wallet);
     history.push({
       role: "user",
       content: sanitized,
@@ -102,12 +114,67 @@ export function createAgentRouter(toolCtx: ToolContext): Router {
     });
   });
 
-  router.get("/history", (_req, res) => {
+  // POST /api/agent/confirm — confirm or reject a pending action
+  router.post("/confirm", requireAuth, async (req, res) => {
+    const { actionId, approved } = req.body;
+    const wallet = (req as any).verifiedWallet;
+
+    if (!actionId || typeof actionId !== "string") {
+      return res.status(400).json({ error: "actionId is required" });
+    }
+
+    if (typeof approved !== "boolean") {
+      return res.status(400).json({ error: "approved must be a boolean" });
+    }
+
+    if (!approved) {
+      // User rejected — just consume and discard
+      consumeAction(actionId, wallet);
+      return res.json({ rejected: true, actionId });
+    }
+
+    // User approved — consume and execute
+    const action = consumeAction(actionId, wallet);
+    if (!action) {
+      return res.status(404).json({ error: "Action not found, expired, or wallet mismatch" });
+    }
+
+    const requestCtx: ToolContext = {
+      ...toolCtx,
+      callerWallet: wallet,
+    };
+
+    let result: unknown;
+    switch (action.type) {
+      case "swap":
+        result = await executeSwapDirect(action.params, requestCtx);
+        break;
+      case "settings":
+        result = executeSettingsDirect(action.params, requestCtx);
+        break;
+      case "withdrawal":
+        result = await executeWithdrawalDirect(action.params, requestCtx);
+        break;
+      case "strategy_rule":
+        result = executeStrategyRuleDirect(action.params, requestCtx);
+        break;
+      default:
+        return res.status(400).json({ error: `Unknown action type: ${action.type}` });
+    }
+
+    return res.json({ confirmed: true, actionId, result });
+  });
+
+  router.get("/history", optionalAuth, (_req, res) => {
+    const wallet = (_req as any).verifiedWallet;
+    const history = getHistory(wallet);
     res.json({ messages: history });
   });
 
-  router.post("/clear", (_req, res) => {
-    history.length = 0;
+  router.post("/clear", optionalAuth, (_req, res) => {
+    const wallet = (_req as any).verifiedWallet;
+    const key = wallet ?? "__anonymous__";
+    historyMap.delete(key);
     res.json({ cleared: true });
   });
 

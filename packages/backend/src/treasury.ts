@@ -218,6 +218,7 @@ const app = express();
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
   "http://localhost:4173",
+  "https://frontend-nine-green-89.vercel.app",
   process.env.PRODUCTION_ORIGIN,
 ].filter(Boolean) as string[];
 
